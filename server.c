@@ -1,41 +1,45 @@
 #include <stdio.h>
+#include <string.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <string.h>
 
-#define DEFAULT_BUFLEN 4096
-char recvbuffer[DEFAULT_BUFLEN];
+#define DEFAULT_BUF_LEN 4096
 
-int main()
+char recvBuffer[DEFAULT_BUF_LEN];
+char sendBuffer[DEFAULT_BUF_LEN];
+
+int main(void)
 {
+    // Initialize Winsock
     WSADATA wsaData;
-    int result;
     WORD version = MAKEWORD(2, 2);
-    result = WSAStartup(version, &wsaData);
+
+    int result = WSAStartup(version, &wsaData);
 
     if (result != 0)
     {
-        printf("WSAStartup failed with error: %d\n", result);
-
+        printf("WSAStartup failed: %d\n", result);
         return 1;
     }
-    // Create socket
+
+    // Create listening socket
     SOCKET sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd == INVALID_SOCKET)
     {
-        printf("Error at socket(): %ld\n", WSAGetLastError());
+        printf("socket failed: %ld\n", WSAGetLastError());
         WSACleanup();
         return 1;
     }
 
-    struct sockaddr_in saServer;
+    // Configure server address
+    struct sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
 
-    memset(&saServer, 0, sizeof(saServer));
-    saServer.sin_family = AF_INET;
-    saServer.sin_port = htons(8080);
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(8080);
 
-    int ipResult = InetPton(saServer.sin_family, "127.0.0.1", &saServer.sin_addr);
+    int ipResult = InetPton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
 
     if (ipResult != 1)
     {
@@ -45,34 +49,39 @@ int main()
         return 1;
     }
 
-    // Setup the TCP listening socket
-    int resolve = bind(sockfd, (const SOCKADDR *)&saServer, sizeof(saServer));
+    // Bind socket to address
+    int bindResult =
+        bind(sockfd, (const SOCKADDR *)&serverAddr, sizeof(serverAddr));
 
-    if (resolve == SOCKET_ERROR)
+    if (bindResult == SOCKET_ERROR)
     {
-        printf("bind failed with error: %d\n", WSAGetLastError());
+        printf("bind failed: %d\n", WSAGetLastError());
         closesocket(sockfd);
         WSACleanup();
         return 1;
     }
 
-    // listening for an incoming connection
+    // Start listening
     int listenResult = listen(sockfd, SOMAXCONN);
 
     if (listenResult == SOCKET_ERROR)
     {
-        printf("listen failed with error: %d\n", WSAGetLastError());
+        printf("listen failed: %d\n", WSAGetLastError());
         closesocket(sockfd);
         WSACleanup();
         return 1;
     }
 
-    // accepting connections from clients
-    struct sockaddr_in clientInfo;
-    memset(&clientInfo, 0, sizeof(clientInfo));
-    int clientInfoSize = sizeof(clientInfo);
-    SOCKET clientSocket = accept(sockfd, (struct sockaddr *)&clientInfo,
-                                 &clientInfoSize);
+    printf("Server listening on http://127.0.0.1:8080\n");
+
+    // Accept a client connection
+    struct sockaddr_in clientAddr;
+    memset(&clientAddr, 0, sizeof(clientAddr));
+
+    int clientAddrSize = sizeof(clientAddr);
+
+    SOCKET clientSocket =
+        accept(sockfd, (struct sockaddr *)&clientAddr, &clientAddrSize);
 
     if (clientSocket == INVALID_SOCKET)
     {
@@ -82,23 +91,63 @@ int main()
         return 1;
     }
 
-    // receive and send data on a socket
-    int recieved = recv(clientSocket, recvbuffer, DEFAULT_BUFLEN - 1, 0);
-    if (recieved > 0)
+    // Receive request
+    int received =
+        recv(clientSocket, recvBuffer, DEFAULT_BUF_LEN - 1, 0);
+
+    if (received > 0)
     {
-        printf("Bytes received: %d\n", recieved);
-        recvbuffer[recieved] = '\0';
-        printf("%s\n", recvbuffer);
+        recvBuffer[received] = '\0';
+
+        printf("Bytes received: %d\n\n", received);
+        printf("%s\n", recvBuffer);
     }
-    else if (recieved == 0)
+    else if (received == 0)
     {
         printf("Connection closing...\n");
     }
     else
     {
         printf("recv failed: %d\n", WSAGetLastError());
+
         closesocket(clientSocket);
+        closesocket(sockfd);
         WSACleanup();
+
         return 1;
     }
+
+    // Send HTTP response
+    const char *body = "Hello, World!";
+
+    snprintf(
+        sendBuffer,
+        sizeof(sendBuffer),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain\r\n"
+        "Content-Length: %zu\r\n"
+        "\r\n"
+        "%s", strlen(body), body);
+
+    int bytesSent =
+        send(clientSocket, sendBuffer, strlen(sendBuffer), 0);
+
+    if (bytesSent == SOCKET_ERROR)
+    {
+        printf("send failed: %d\n", WSAGetLastError());
+
+        closesocket(clientSocket);
+        closesocket(sockfd);
+        WSACleanup();
+
+        return 1;
+    }
+
+    printf("Bytes sent: %d\n", bytesSent);
+
+    closesocket(clientSocket);
+    closesocket(sockfd);
+    WSACleanup();
+
+    return 0;
 }
