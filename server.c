@@ -4,9 +4,7 @@
 #include <ws2tcpip.h>
 
 #define DEFAULT_BUF_LEN 4096
-#define DEFAULT_HTML_LEN 100000
 
-char htmlBuffer[DEFAULT_HTML_LEN];
 char recvBuffer[DEFAULT_BUF_LEN];
 char sendBuffer[DEFAULT_BUF_LEN];
 
@@ -24,7 +22,6 @@ int main(void)
     if (result != 0)
     {
         printf("WSAStartup failed: %d\n", result);
-        printf("EXIT A\n");
         return 1;
     }
 
@@ -35,7 +32,6 @@ int main(void)
     {
         printf("socket failed: %ld\n", WSAGetLastError());
         WSACleanup();
-        printf("EXIT B\n");
         return 1;
     }
 
@@ -53,7 +49,6 @@ int main(void)
         printf("InetPton failed\n");
         closesocket(sockfd);
         WSACleanup();
-        printf("EXIT C\n");
         return 1;
     }
 
@@ -66,7 +61,6 @@ int main(void)
         printf("bind failed: %d\n", WSAGetLastError());
         closesocket(sockfd);
         WSACleanup();
-        printf("EXIT D\n");
         return 1;
     }
 
@@ -78,7 +72,6 @@ int main(void)
         printf("listen failed: %d\n", WSAGetLastError());
         closesocket(sockfd);
         WSACleanup();
-        printf("EXIT E\n");
         return 1;
     }
 
@@ -101,7 +94,6 @@ int main(void)
             printf("accept failed: %d\n", WSAGetLastError());
             closesocket(sockfd);
             WSACleanup();
-            printf("EXIT F\n");
             return 1;
         }
 
@@ -127,17 +119,17 @@ int main(void)
             closesocket(clientSocket);
             closesocket(sockfd);
             WSACleanup();
-            printf("EXIT G\n");
             return 1;
         }
 
         // Send HTTP response
         char *filename = "index.html";
         char *contentType = "text/html";
-        sscanf(recvBuffer, "%15s %225s", method, path);
-
-        printf("Method: %s\n", method);
-        printf("Path: %s\n", path);
+        if (sscanf(recvBuffer, "%15s %255s", method, path) != 2)
+        {
+            closesocket(clientSocket);
+            continue;
+        }
         if (strcmp(path, "/") != 0)
         {
             filename = path + 1;
@@ -165,47 +157,66 @@ int main(void)
             closesocket(clientSocket);
             continue;
         }
-
-        int readBytes = fread(htmlBuffer, 1, DEFAULT_HTML_LEN - 1, htmlFile);
-        if (readBytes > 0)
+        fseek(htmlFile, 0, SEEK_END);
+        long fileSize = ftell(htmlFile);
+        if (fileSize == -1)
         {
-            htmlBuffer[readBytes] = '\0';
+            printf("ftell failed\n");
+            fclose(htmlFile);
+            closesocket(clientSocket);
+            continue;
+        }
+        fseek(htmlFile, 0, SEEK_SET);
+        char *htmlBuffer = malloc((size_t)fileSize + 1);
+        if (htmlBuffer == NULL)
+        {
+            printf("Memory Allocation failed!\n");
+            closesocket(clientSocket);
+            free(htmlBuffer);
+            fclose(htmlFile);
+            return 1;
+        }
+        size_t readBytes = fread(htmlBuffer, 1, fileSize, htmlFile);
+
+        htmlBuffer[fileSize] = '\0';
+        if (readBytes == fileSize)
+        {
+
             snprintf(
                 sendBuffer,
                 sizeof(sendBuffer),
                 "HTTP/1.1 200 OK\r\n"
                 "Connection: close\r\n"
                 "Content-Type: %s\r\n"
-                "Content-Length: %i\r\n"
+                "Content-Length: %zu\r\n"
                 "\r\n",
                 contentType,
-                readBytes);
+                fileSize);
         }
         else
         {
             printf("Couldnt read the file\n");
-            printf("EXIT I\n");
+            closesocket(clientSocket);
+            free(htmlBuffer);
+            fclose(htmlFile);
             return 1;
         }
         int header_bytes_sent = send(clientSocket, sendBuffer, strlen(sendBuffer), 0);
         int body_bytes_sent = send(clientSocket, htmlBuffer, readBytes, 0);
-        printf("Header bytes sent: %d\n", header_bytes_sent);
-        printf("Body bytes sent: %d\n", body_bytes_sent);
         if (body_bytes_sent == SOCKET_ERROR || header_bytes_sent == SOCKET_ERROR)
         {
             printf("Sending http response failed: %d\n", WSAGetLastError());
             fclose(htmlFile);
             closesocket(clientSocket);
-            printf("EXIT J\n");
+            free(htmlBuffer);
             continue;
         }
-        printf("Closing file and socket\n");
+        free(htmlBuffer);
         fclose(htmlFile);
         closesocket(clientSocket);
     }
 
     closesocket(sockfd);
     WSACleanup();
-    printf("EXIT K\n");
     return 0;
 }
