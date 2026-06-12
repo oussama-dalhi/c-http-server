@@ -144,21 +144,67 @@ int main(void)
         }
 
         FILE *htmlFile = fopen(filename, "rb");
+        long fileSize;
+        char *htmlBuffer;
         if (htmlFile == NULL)
         {
+            htmlFile = fopen("404.html", "rb");
+            if (htmlFile == NULL)
+            {
+                snprintf(
+                    sendBuffer,
+                    sizeof(sendBuffer),
+                    "HTTP/1.1 404 Not Found\r\n"
+                    "Connection: close\r\n"
+                    "Content-Length: 0\r\n"
+                    "\r\n");
+
+                send(clientSocket, sendBuffer, strlen(sendBuffer), 0);
+                closesocket(clientSocket);
+                continue;
+            }
+
+            fseek(htmlFile, 0, SEEK_END);
+            fileSize = ftell(htmlFile);
+            fseek(htmlFile, 0, SEEK_SET);
+
+            htmlBuffer = malloc((size_t)fileSize + 1);
+            if (htmlBuffer == NULL)
+            {
+                fclose(htmlFile);
+                closesocket(clientSocket);
+                continue;
+            }
+            size_t bytesCount = fread(htmlBuffer, 1, fileSize, htmlFile);
+            if (bytesCount != fileSize)
+            {
+                free(htmlBuffer);
+                fclose(htmlFile);
+                closesocket(clientSocket);
+                continue;
+            }
+            htmlBuffer[fileSize] = '\0';
             snprintf(
                 sendBuffer,
                 sizeof(sendBuffer),
                 "HTTP/1.1 404 Not Found\r\n"
                 "Connection: close\r\n"
-                "Content-Length: 0\r\n"
-                "\r\n");
+                "Content-Type: text/html\r\n"
+                "Content-Length: %ld\r\n"
+                "\r\n",
+                fileSize);
+
             send(clientSocket, sendBuffer, strlen(sendBuffer), 0);
+            send(clientSocket, htmlBuffer, (int)fileSize, 0);
+
+            free(htmlBuffer);
+            fclose(htmlFile);
             closesocket(clientSocket);
             continue;
         }
+
         fseek(htmlFile, 0, SEEK_END);
-        long fileSize = ftell(htmlFile);
+        fileSize = ftell(htmlFile);
         if (fileSize == -1)
         {
             printf("ftell failed\n");
@@ -167,7 +213,7 @@ int main(void)
             continue;
         }
         fseek(htmlFile, 0, SEEK_SET);
-        char *htmlBuffer = malloc((size_t)fileSize + 1);
+        htmlBuffer = malloc((size_t)fileSize + 1);
         if (htmlBuffer == NULL)
         {
             printf("Memory Allocation failed!\n");
@@ -177,7 +223,6 @@ int main(void)
             return 1;
         }
         size_t readBytes = fread(htmlBuffer, 1, fileSize, htmlFile);
-
         htmlBuffer[fileSize] = '\0';
         if (readBytes == fileSize)
         {
@@ -201,8 +246,10 @@ int main(void)
             fclose(htmlFile);
             return 1;
         }
+        // Get Number of Bytes sent
         int header_bytes_sent = send(clientSocket, sendBuffer, strlen(sendBuffer), 0);
-        int body_bytes_sent = send(clientSocket, htmlBuffer, readBytes, 0);
+        int body_bytes_sent = send(clientSocket, htmlBuffer, (int)fileSize, 0);
+
         if (body_bytes_sent == SOCKET_ERROR || header_bytes_sent == SOCKET_ERROR)
         {
             printf("Sending http response failed: %d\n", WSAGetLastError());
