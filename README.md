@@ -23,6 +23,88 @@ The server listens for incoming browser connections, parses HTTP requests, serve
 ![404 Page](screenshots/404-page.png)
 
 ---
+## Setup Guide (Windows)
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/oussama-dalhi/c-http-server.git
+cd http-server
+```
+
+---
+
+### 2. Install GCC (MinGW)
+
+This project requires a C compiler.
+
+Verify GCC is installed:
+
+```bash
+gcc --version
+```
+
+If GCC is not installed, install MinGW and ensure `gcc` is available in your system PATH.
+
+---
+
+### 3. Compile the Server
+
+Build the project using:
+
+```bash
+gcc server.c -o server -lws2_32
+```
+
+The `-lws2_32` flag links the Windows Sockets library required by Winsock.
+
+After a successful build, an executable named:
+
+```text
+server.exe
+```
+
+will be created.
+
+---
+
+### 4. Run the Server
+
+Start the server:
+
+```bash
+server.exe
+```
+
+Expected output:
+
+```text
+Server listening on http://127.0.0.1:8080
+```
+
+---
+
+### 5. Open the Application
+
+Open a web browser and navigate to:
+
+```text
+http://127.0.0.1:8080
+```
+
+The server will serve the requested files and display incoming HTTP requests in the terminal.
+
+---
+
+### 6. Stop the Server
+
+Press:
+
+```text
+Ctrl + C
+```
+
+in the terminal to stop the server.
 
 ## Features
 
