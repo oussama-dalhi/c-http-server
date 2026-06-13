@@ -8,7 +8,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-
+#include <ifaddrs.h>
+void printLocalIps(); 
 #define DEFAULT_BUF_LEN 4096
 
 char recvBuffer[DEFAULT_BUF_LEN];
@@ -33,14 +34,7 @@ int main(void)
 
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(8080);
-
-    int ipResult = inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
-
-    if (ipResult != 1)
-    {
-        close(sockfd);
-        return 1;
-    }
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
 
     // Bind socket to address
     int bindResult =
@@ -61,8 +55,8 @@ int main(void)
 	return 1;
     }
 
-    printf("Server listening on http://127.0.0.1:8080\n");
-
+    printf("Server listening on:\n");
+    printLocalIps();
     // Accept a client connection
     while (1)
     {
@@ -247,3 +241,55 @@ int main(void)
     close(sockfd);
     return 0;
 }
+
+
+void printLocalIps() 
+{
+	struct ifaddrs *ifaddr;
+
+	struct ifaddrs *ifa;
+
+	if(getifaddrs(&ifaddr) == -1)
+	{
+		perror("getifaddr");
+	}
+	for(ifa = ifaddr;
+		ifa != NULL;
+		ifa = ifa->ifa_next)
+	{
+		if(ifa->ifa_addr == NULL)
+		{
+		continue;
+		}
+		if(ifa->ifa_addr->sa_family == AF_INET)
+		{
+			char ip[INET_ADDRSTRLEN];
+			struct sockaddr_in *addr = (struct sockaddr_in *) ifa->ifa_addr;
+ 
+			inet_ntop(AF_INET,
+			&addr->sin_addr,
+			ip, sizeof(ip));
+			printf("   http://%s:8080\n", ip);
+
+		}
+	}
+
+	freeifaddrs(ifaddr);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
