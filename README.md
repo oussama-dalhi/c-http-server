@@ -29,7 +29,7 @@ The server listens for incoming browser connections, parses HTTP requests, serve
 
 ```bash
 git clone https://github.com/oussama-dalhi/c-http-server.git
-cd http-server
+cd c-http-server
 ```
 
 ---
