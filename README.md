@@ -1,50 +1,112 @@
 # HTTP Server in C
 
-A simple HTTP server written from scratch in C using the Winsock API.
+A simple HTTP server written from scratch in C using the Windows Sockets API (Winsock).
 
-The project was created to better understand how web servers work internally by implementing the core networking concepts manually instead of relying on frameworks.
+This project was built to better understand how web servers work internally by manually implementing TCP communication, HTTP request parsing, file serving, and HTTP response generation without using external frameworks.
+
+The server listens for incoming browser connections, parses HTTP requests, serves static files, and returns properly formatted HTTP responses.
+
+---
+
+## Preview
+
+### Homepage
+
+![Homepage](screenshots/homepage.png)
+
+### Server Running
+
+![Server Output](screenshots/server-output.png)
+
+### 404 Page
+
+![404 Page](screenshots/404-page.png)
+
+---
 
 ## Features
 
-- TCP server built with Winsock
-- HTTP request parsing
-- Support for GET requests
-- Serves static files
-  - HTML
-  - CSS
-  - JavaScript
-- Dynamic file routing
-- Content-Type detection
-- 404 Not Found handling
-- Multiple client requests handled sequentially
-- Manual HTTP response generation
+* TCP server built with Winsock
+* HTTP/1.1 request handling
+* GET request support
+* Static file serving
+
+  * HTML
+  * CSS
+  * JavaScript
+* Dynamic routing based on requested path
+* MIME type detection
+* Custom 404 page support
+* Dynamic Content-Length calculation
+* Manual HTTP response generation
+* Sequential client handling
+* File loading using standard C file I/O
 
 ---
 
 ## Technologies
 
-- C
-- Winsock2
-- TCP/IP
-- HTTP/1.1
+* C
+* Winsock2
+* TCP/IP
+* HTTP/1.1
+* File I/O
+* Dynamic Memory Allocation
 
 ---
 
 ## How It Works
 
+When a browser connects to the server, the following sequence occurs:
+
+```text
+Browser
+   │
+   ▼
+TCP Connection
+   │
+   ▼
+accept()
+   │
+   ▼
+recv()
+   │
+   ▼
+Parse HTTP Request
+   │
+   ▼
+Determine Requested File
+   │
+   ▼
+Read File From Disk
+   │
+   ▼
+Build HTTP Response
+   │
+   ▼
+send()
+   │
+   ▼
+Browser Renders Content
+```
+
+---
+
+## Detailed Request Lifecycle
+
 ### 1. Initialize Winsock
 
-The server starts by initializing the Windows Sockets API.
+Before any network communication can occur, the Windows networking subsystem must be initialized.
 
 ```c
 WSAStartup(MAKEWORD(2, 2), &wsaData);
 ```
 
-This prepares the networking subsystem for socket operations.
+This loads the Winsock DLL and prepares the application for socket operations.
 
 ---
 
-### 2. Create a TCP Socket
+### 2. Create a Listening Socket
 
 A TCP socket is created using:
 
@@ -52,17 +114,17 @@ A TCP socket is created using:
 socket(AF_INET, SOCK_STREAM, 0);
 ```
 
-Parameters:
-
-| Value       | Meaning          |
+| Parameter   | Meaning          |
 | ----------- | ---------------- |
 | AF_INET     | IPv4             |
 | SOCK_STREAM | TCP              |
 | 0           | Default protocol |
 
+This socket will listen for incoming browser connections.
+
 ---
 
-### 3. Configure Server Address
+### 3. Configure the Server Address
 
 The server is configured to listen on:
 
@@ -80,100 +142,104 @@ InetPton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
 
 ### 4. Bind the Socket
 
-The socket is bound to the selected IP address and port.
-
 ```c
 bind(sockfd, ...);
 ```
 
-This reserves the address for the server.
+Binding associates the socket with a specific IP address and port number.
+
+Without binding, the operating system would not know where incoming requests should be delivered.
 
 ---
 
 ### 5. Start Listening
 
-The server enters listening mode.
-
 ```c
 listen(sockfd, SOMAXCONN);
 ```
 
-At this point the operating system begins accepting incoming TCP connection requests.
+The socket is switched into listening mode.
+
+At this point the server is waiting for browsers to connect.
 
 ---
 
-### 6. Accept Client Connections
+### 6. Accept Incoming Connections
 
-The server enters an infinite loop:
+The server runs continuously:
 
 ```c
 while (1)
 ```
 
-Each iteration:
+Each new browser connection creates a dedicated client socket.
 
 ```c
 accept(...)
 ```
 
-creates a new client socket for communication.
+The listening socket remains active while the client socket handles communication.
 
 ---
 
-### 7. Receive HTTP Requests
+### 7. Receive the HTTP Request
 
-The browser sends requests such as:
+The browser sends a request similar to:
 
 ```http
-GET /index.html HTTP/1.1
+GET / HTTP/1.1
 Host: 127.0.0.1:8080
 ```
 
-The server reads the request using:
+The server receives the request using:
 
 ```c
 recv(...)
 ```
 
-and stores it inside:
+The raw request is stored in:
 
 ```c
 recvBuffer
 ```
 
+For debugging purposes, the complete request is printed to the terminal.
+
 ---
 
 ### 8. Parse Method and Path
 
-The first request line is parsed using:
+The request line is parsed using:
 
 ```c
-sscanf(recvBuffer, "%15s %225s", method, path);
+sscanf(recvBuffer, "%15s %255s", method, path);
 ```
 
 Example:
 
 ```text
 Method: GET
-Path: /index.html
+Path: /style.css
 ```
+
+This information determines which file should be returned.
 
 ---
 
 ### 9. Route Requests
 
-The requested path determines which file should be served.
+The requested path is mapped to a file on disk.
 
 Examples:
 
-| Request    | File       |
-| ---------- | ---------- |
-| /          | index.html |
-| /style.css | style.css  |
-| /script.js | script.js  |
+| URL        | File Served |
+| ---------- | ----------- |
+| /          | index.html  |
+| /style.css | style.css   |
+| /script.js | script.js   |
 
 ```c
-if(strcmp(path, "/") != 0)
+if (strcmp(path, "/") != 0)
 {
     filename = path + 1;
 }
@@ -183,46 +249,80 @@ if(strcmp(path, "/") != 0)
 
 ### 10. Detect Content Type
 
-The server selects the correct MIME type.
+The server determines the correct MIME type.
 
-```c
+Examples:
+
+```text
 text/html
 text/css
 application/javascript
 ```
 
-Example:
+This allows browsers to properly interpret received files.
 
 ```c
-if(strstr(filename, ".css"))
+if (strstr(filename, ".css"))
 {
     contentType = "text/css";
 }
 ```
 
-This allows browsers to correctly interpret resources.
-
 ---
 
 ### 11. Load File Contents
 
-Files are opened using:
+The requested file is opened:
 
 ```c
 fopen(filename, "rb");
 ```
 
-The contents are read into memory using:
+The server then:
+
+1. Determines file size
+2. Allocates memory
+3. Reads the entire file
+4. Stores it in memory
+
+Functions used:
 
 ```c
+fseek(...)
+ftell(...)
+malloc(...)
 fread(...)
 ```
 
 ---
 
-### 12. Generate HTTP Response
+### 12. Handle Missing Files
 
-The server manually builds an HTTP response header.
+If the requested file cannot be found:
+
+```c
+fopen(...) == NULL
+```
+
+the server attempts to load:
+
+```text
+404.html
+```
+
+If no custom 404 page exists, a minimal 404 response is returned.
+
+Example:
+
+```http
+HTTP/1.1 404 Not Found
+```
+
+---
+
+### 13. Build the HTTP Response
+
+The response headers are manually generated.
 
 Example:
 
@@ -241,9 +341,9 @@ snprintf(...)
 
 ---
 
-### 13. Send Response
+### 14. Send the Response
 
-The response is transmitted in two steps:
+The response is sent in two stages.
 
 #### Header
 
@@ -259,27 +359,23 @@ send(clientSocket,
 ```c
 send(clientSocket,
      htmlBuffer,
-     readBytes,
+     (int)fileSize,
      0);
 ```
 
+The browser then renders the received content.
+
 ---
 
-### 14. Handle Missing Files
+### 15. Close the Connection
 
-If a requested file does not exist:
+After the response has been delivered:
 
 ```c
-fopen(...) == NULL
+closesocket(clientSocket);
 ```
 
-the server returns:
-
-```http
-HTTP/1.1 404 Not Found
-```
-
-and closes the connection.
+The server returns to the listening loop and waits for the next connection.
 
 ---
 
@@ -294,6 +390,7 @@ Host: 127.0.0.1:8080
 
 ```http
 HTTP/1.1 200 OK
+Connection: close
 Content-Type: text/css
 Content-Length: 1372
 ```
@@ -305,55 +402,42 @@ Content-Length: 1372
 ```text
 http-server/
 │
+├── screenshots/
+│   ├── homepage.png
+│   ├── server-output.png
+│   └── 404-page.png
+│
 ├── server.c
 ├── index.html
 ├── style.css
+├── script.js
+├── 404.html
 ├── README.md
 └── .gitignore
 ```
 
 ---
 
-## What I Learned
+## Building
 
-Through this project I gained practical experience with:
-
-- TCP/IP networking
-- Socket programming
-- HTTP request and response structure
-- MIME types
-- Client-server communication
-- File I/O in C
-- Memory management
-- Debugging network applications
-- Browser-server interactions
-
----
-
-## Future Improvements
-
-Potential enhancements include:
-
-- Persistent connections (Keep-Alive)
-- Serving images
-- Multithreading
-- HTTP request parsing improvements
-- Directory traversal protection
-
----
-
-## Running the Project
-
-Compile:
+### MinGW GCC
 
 ```bash
-gcc -o server server.c -lws2_32
+gcc server.c -o server -lws2_32
 ```
 
-Run:
+---
+
+## Running
 
 ```bash
-./server
+server.exe
+```
+
+Output:
+
+```text
+Server listening on http://127.0.0.1:8080
 ```
 
 Open:
@@ -362,7 +446,41 @@ Open:
 http://127.0.0.1:8080
 ```
 
-in a web browser.
+in your browser.
+
+---
+
+## What I Learned
+
+Through this project I gained practical experience with:
+
+* TCP/IP networking
+* Socket programming
+* Winsock API
+* HTTP request parsing
+* HTTP response generation
+* MIME types
+* Static file serving
+* Memory allocation
+* File I/O
+* Browser-server communication
+* Debugging network applications
+
+---
+
+## Future Improvements
+
+Potential enhancements include:
+
+* Linux port using POSIX sockets
+* Keep-Alive connections
+* Multithreading
+* Serving images
+* Improved HTTP parsing
+* Logging system
+* Better error handling
+* Directory traversal protection
+* HTTP status code abstraction
 
 ---
 
