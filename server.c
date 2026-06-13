@@ -1,7 +1,13 @@
+
 #include <stdio.h>
 #include <string.h>
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <unistd.h>
+
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 #define DEFAULT_BUF_LEN 4096
 
@@ -13,25 +19,11 @@ char path[256];
 
 int main(void)
 {
-    // Initialize Winsock
-    WSADATA wsaData;
-    WORD version = MAKEWORD(2, 2);
-
-    int result = WSAStartup(version, &wsaData);
-
-    if (result != 0)
-    {
-        printf("WSAStartup failed: %d\n", result);
-        return 1;
-    }
-
     // Create listening socket
-    SOCKET sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
-    if (sockfd == INVALID_SOCKET)
+    if (sockfd == -1)
     {
-        printf("socket failed: %ld\n", WSAGetLastError());
-        WSACleanup();
         return 1;
     }
 
@@ -42,37 +34,31 @@ int main(void)
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(8080);
 
-    int ipResult = InetPton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
+    int ipResult = inet_pton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
 
     if (ipResult != 1)
     {
-        printf("InetPton failed\n");
-        closesocket(sockfd);
-        WSACleanup();
+        close(sockfd);
         return 1;
     }
 
     // Bind socket to address
     int bindResult =
-        bind(sockfd, (const SOCKADDR *)&serverAddr, sizeof(serverAddr));
+        bind(sockfd, (const struct sockaddr *)&serverAddr, sizeof(serverAddr));
 
-    if (bindResult == SOCKET_ERROR)
+    if (bindResult == -1)
     {
-        printf("bind failed: %d\n", WSAGetLastError());
-        closesocket(sockfd);
-        WSACleanup();
+        close(sockfd);
         return 1;
     }
 
     // Start listening
     int listenResult = listen(sockfd, SOMAXCONN);
 
-    if (listenResult == SOCKET_ERROR)
+    if (listenResult == -1)
     {
-        printf("listen failed: %d\n", WSAGetLastError());
-        closesocket(sockfd);
-        WSACleanup();
-        return 1;
+	close(sockfd);
+	return 1;
     }
 
     printf("Server listening on http://127.0.0.1:8080\n");
@@ -86,14 +72,12 @@ int main(void)
 
         int clientAddrSize = sizeof(clientAddr);
 
-        SOCKET clientSocket =
+        int clientSocket =
             accept(sockfd, (struct sockaddr *)&clientAddr, &clientAddrSize);
 
-        if (clientSocket == INVALID_SOCKET)
+        if (clientSocket == -1)
         {
-            printf("accept failed: %d\n", WSAGetLastError());
-            closesocket(sockfd);
-            WSACleanup();
+            close(sockfd);
             return 1;
         }
 
@@ -108,17 +92,14 @@ int main(void)
         }
         else if (received == 0)
         {
-            printf("Connection closing...\n");
-            closesocket(clientSocket);
+            close(clientSocket);
             continue;
         }
         else
         {
-            printf("recv failed: %d\n", WSAGetLastError());
 
-            closesocket(clientSocket);
-            closesocket(sockfd);
-            WSACleanup();
+            close(clientSocket);
+            close(sockfd);
             return 1;
         }
 
@@ -127,7 +108,7 @@ int main(void)
         char *contentType = "text/html";
         if (sscanf(recvBuffer, "%15s %255s", method, path) != 2)
         {
-            closesocket(clientSocket);
+            close(clientSocket);
             continue;
         }
         if (strcmp(path, "/") != 0)
@@ -160,7 +141,7 @@ int main(void)
                     "\r\n");
 
                 send(clientSocket, sendBuffer, strlen(sendBuffer), 0);
-                closesocket(clientSocket);
+                close(clientSocket);
                 continue;
             }
 
@@ -172,7 +153,7 @@ int main(void)
             if (htmlBuffer == NULL)
             {
                 fclose(htmlFile);
-                closesocket(clientSocket);
+                close(clientSocket);
                 continue;
             }
             size_t bytesCount = fread(htmlBuffer, 1, fileSize, htmlFile);
@@ -180,7 +161,7 @@ int main(void)
             {
                 free(htmlBuffer);
                 fclose(htmlFile);
-                closesocket(clientSocket);
+                close(clientSocket);
                 continue;
             }
             htmlBuffer[fileSize] = '\0';
@@ -199,7 +180,7 @@ int main(void)
 
             free(htmlBuffer);
             fclose(htmlFile);
-            closesocket(clientSocket);
+            close(clientSocket);
             continue;
         }
 
@@ -209,7 +190,7 @@ int main(void)
         {
             printf("ftell failed\n");
             fclose(htmlFile);
-            closesocket(clientSocket);
+            close(clientSocket);
             continue;
         }
         fseek(htmlFile, 0, SEEK_SET);
@@ -217,7 +198,7 @@ int main(void)
         if (htmlBuffer == NULL)
         {
             printf("Memory Allocation failed!\n");
-            closesocket(clientSocket);
+            close(clientSocket);
             free(htmlBuffer);
             fclose(htmlFile);
             return 1;
@@ -241,7 +222,7 @@ int main(void)
         else
         {
             printf("Couldnt read the file\n");
-            closesocket(clientSocket);
+            close(clientSocket);
             free(htmlBuffer);
             fclose(htmlFile);
             return 1;
@@ -250,20 +231,19 @@ int main(void)
         int header_bytes_sent = send(clientSocket, sendBuffer, strlen(sendBuffer), 0);
         int body_bytes_sent = send(clientSocket, htmlBuffer, (int)fileSize, 0);
 
-        if (body_bytes_sent == SOCKET_ERROR || header_bytes_sent == SOCKET_ERROR)
+        if (body_bytes_sent == -1 || header_bytes_sent == -1)
         {
-            printf("Sending http response failed: %d\n", WSAGetLastError());
             fclose(htmlFile);
-            closesocket(clientSocket);
+            close(clientSocket);
             free(htmlBuffer);
             continue;
         }
         free(htmlBuffer);
         fclose(htmlFile);
-        closesocket(clientSocket);
+        close(clientSocket);
     }
 
-    closesocket(sockfd);
-    WSACleanup();
+
+    close(sockfd);
     return 0;
 }
