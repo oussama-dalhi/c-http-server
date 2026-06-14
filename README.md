@@ -73,7 +73,7 @@ The default page served by the HTTP server.
 
 When a requested file cannot be found, the server serves a custom 404 page.
 
-![404 Page](screenshots/404-page.png)
+![404 Page](screenshots/404page.png)
 
 ---
 
