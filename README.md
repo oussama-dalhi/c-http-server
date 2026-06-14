@@ -1,52 +1,96 @@
-# HTTP Server in C
+# HTTP Server in C (Linux Version)
 
-A simple HTTP server written from scratch in C using the Winsock API.
+A simple HTTP server written from scratch in C using the Linux socket API.
 
-The project was created to better understand how web servers work internally by implementing the core networking concepts manually instead of relying on frameworks.
+This project was built to understand how web servers work internally by implementing networking, request parsing, routing, and HTTP response generation without relying on external frameworks.
+
+The server listens for TCP connections, parses incoming HTTP requests, serves static files, and returns custom HTTP responses including a custom 404 page.
+
+---
 
 ## Features
 
-- TCP server built with Winsock
-- HTTP request parsing
-- Support for GET requests
-- Serves static files
-  - HTML
-  - CSS
-  - JavaScript
-- Dynamic file routing
-- Content-Type detection
-- 404 Not Found handling
-- Multiple client requests handled sequentially
-- Manual HTTP response generation
+* TCP server built using Linux sockets
+* HTTP/1.1 request handling
+* Support for GET requests
+* Serves static files
+
+  * HTML
+  * CSS
+  * JavaScript
+* Dynamic routing based on URL paths
+* Content-Type detection
+* Custom 404 page support
+* Sequential client handling
+* Manual HTTP response generation
+* Automatic local IP address discovery
+* LAN access support
 
 ---
 
 ## Technologies
 
-- C
-- Winsock2
-- TCP/IP
-- HTTP/1.1
+* C
+* Linux Socket API
+* TCP/IP
+* HTTP/1.1
+* GCC
+* Neovim
+
+---
+
+## Screenshots
+
+### Server Startup
+
+The server automatically discovers and displays available network interfaces.
+
+This allows the application to be accessed locally and from other devices connected to the same network.
+
+![Server Startup](screenshots/server-startup.png)
+
+---
+
+### HTTP Request Logging
+
+Incoming browser requests are printed directly to the terminal.
+
+This makes it easier to understand how browsers communicate with web servers.
+
+![HTTP Request Logging](screenshots/http-request.png)
+
+---
+
+### Homepage
+
+The default page served by the HTTP server.
+
+![Homepage](screenshots/homepage.png)
+
+---
+
+### Custom 404 Page
+
+When a requested file cannot be found, the server serves a custom 404 page.
+
+![404 Page](screenshots/404-page.png)
+
+---
+
+
+### Development Workflow
+
+The project was developed on Linux using Neovim and GCC.
+
+![Neovim Workflow](screenshots/nvim-workflow.png)
 
 ---
 
 ## How It Works
 
-### 1. Initialize Winsock
+### 1. Create a Socket
 
-The server starts by initializing the Windows Sockets API.
-
-```c
-WSAStartup(MAKEWORD(2, 2), &wsaData);
-```
-
-This prepares the networking subsystem for socket operations.
-
----
-
-### 2. Create a TCP Socket
-
-A TCP socket is created using:
+The server creates a TCP socket using:
 
 ```c
 socket(AF_INET, SOCK_STREAM, 0);
@@ -62,100 +106,120 @@ Parameters:
 
 ---
 
-### 3. Configure Server Address
+### 2. Configure the Server Address
 
-The server is configured to listen on:
-
-```text
-127.0.0.1:8080
-```
+The server listens on port 8080.
 
 ```c
 serverAddr.sin_family = AF_INET;
 serverAddr.sin_port = htons(8080);
-InetPton(AF_INET, "127.0.0.1", &serverAddr.sin_addr);
+serverAddr.sin_addr.s_addr = INADDR_ANY;
 ```
+
+Using `INADDR_ANY` allows the server to accept connections from all available network interfaces in the current network.
 
 ---
 
-### 4. Bind the Socket
-
-The socket is bound to the selected IP address and port.
+### 3. Bind the Socket
 
 ```c
-bind(sockfd, ...);
+bind(sockfd,
+     (const struct sockaddr *)&serverAddr,
+     sizeof(serverAddr));
 ```
 
-This reserves the address for the server.
+With bind we associate the socket with a local address and port.
 
 ---
 
-### 5. Start Listening
-
-The server enters listening mode.
+### 4. Start Listening
 
 ```c
 listen(sockfd, SOMAXCONN);
 ```
 
-At this point the operating system begins accepting incoming TCP connection requests.
+The operating system begins accepting incoming TCP connection requests.
+
+---
+
+### 5. Display Available Network Interfaces
+
+The server uses:
+
+```c
+getifaddrs()
+```
+
+to enumerate network interfaces and print all available IPv4 addresses.
+
+Example:
+
+```text
+Server listening on:
+
+http://127.0.0.1:8080
+http://192.168.100.226:8080
+```
+
+This allows access from:
+
+* The local machine
+* Other devices on the same network
 
 ---
 
 ### 6. Accept Client Connections
 
-The server enters an infinite loop:
+The server continuously waits for new clients:
 
 ```c
 while (1)
+{
+    accept(...);
+}
 ```
 
-Each iteration:
-
-```c
-accept(...)
-```
-
-creates a new client socket for communication.
+Each accepted connection receives its own client socket.
+With each request memory gets allocated and freed
 
 ---
 
 ### 7. Receive HTTP Requests
 
-The browser sends requests such as:
-
-```http
-GET /index.html HTTP/1.1
-Host: 127.0.0.1:8080
-```
-
-The server reads the request using:
+Incoming requests are read using:
 
 ```c
 recv(...)
 ```
 
-and stores it inside:
+Example request:
 
-```c
-recvBuffer
+```http
+GET / HTTP/1.1
+Host: 192.168.100.226:8080
+User-Agent: Firefox
 ```
+
+The raw request is printed to the terminal for debugging and learning purposes.
 
 ---
 
-### 8. Parse Method and Path
+### 8. Parse the Request
 
-The first request line is parsed using:
+The request method and path are extracted using:
 
 ```c
-sscanf(recvBuffer, "%15s %225s", method, path);
+sscanf(recvBuffer,
+       "%15s %255s",
+       method,
+       path);
 ```
 
 Example:
 
 ```text
 Method: GET
-Path: /index.html
+Path: /style.css
 ```
 
 ---
@@ -166,45 +230,31 @@ The requested path determines which file should be served.
 
 Examples:
 
-| Request    | File       |
-| ---------- | ---------- |
-| /          | index.html |
-| /style.css | style.css  |
-| /script.js | script.js  |
-
-```c
-if(strcmp(path, "/") != 0)
-{
-    filename = path + 1;
-}
-```
+| Request    | File Served |
+| ---------- | ----------- |
+| /          | index.html  |
+| /style.css | style.css   |
+| /script.js | script.js   |
 
 ---
 
 ### 10. Detect Content Type
 
-The server selects the correct MIME type.
+The server determines the correct MIME type.
 
-```c
+Examples:
+
+```text
 text/html
 text/css
 application/javascript
 ```
 
-Example:
-
-```c
-if(strstr(filename, ".css"))
-{
-    contentType = "text/css";
-}
-```
-
-This allows browsers to correctly interpret resources.
+This allows browsers to properly interpret files.
 
 ---
 
-### 11. Load File Contents
+### 11. Load the Requested File
 
 Files are opened using:
 
@@ -212,7 +262,7 @@ Files are opened using:
 fopen(filename, "rb");
 ```
 
-The contents are read into memory using:
+The file contents are loaded into memory using:
 
 ```c
 fread(...)
@@ -220,9 +270,13 @@ fread(...)
 
 ---
 
-### 12. Generate HTTP Response
+### 12. Build the HTTP Response
 
-The server manually builds an HTTP response header.
+Response headers are manually created using:
+
+```c
+snprintf(...)
+```
 
 Example:
 
@@ -233,17 +287,11 @@ Content-Type: text/html
 Content-Length: 559
 ```
 
-using:
-
-```c
-snprintf(...)
-```
-
 ---
 
-### 13. Send Response
+### 13. Send the Response
 
-The response is transmitted in two steps:
+The response is transmitted in two stages.
 
 #### Header
 
@@ -259,7 +307,7 @@ send(clientSocket,
 ```c
 send(clientSocket,
      htmlBuffer,
-     readBytes,
+     fileSize,
      0);
 ```
 
@@ -267,19 +315,19 @@ send(clientSocket,
 
 ### 14. Handle Missing Files
 
-If a requested file does not exist:
+If a requested file cannot be found:
 
 ```c
 fopen(...) == NULL
 ```
 
-the server returns:
+the server serves a custom 404 page.
+
+Example response:
 
 ```http
 HTTP/1.1 404 Not Found
 ```
-
-and closes the connection.
 
 ---
 
@@ -287,8 +335,10 @@ and closes the connection.
 
 ```http
 GET /style.css HTTP/1.1
-Host: 127.0.0.1:8080
+Host: 192.168.100.226:8080
 ```
+
+---
 
 ## Example Response
 
@@ -303,13 +353,75 @@ Content-Length: 1372
 ## Project Structure
 
 ```text
-http-server/
+c-http-server/
 │
 ├── server.c
 ├── index.html
 ├── style.css
-├── README.md
-└── .gitignore
+├── 404.html
+├── screenshots/
+│   ├── homepage.png
+│   ├── 404-page.png
+│   ├── server-startup.png
+│   ├── http-request.png
+│   └── nvim-workflow.png
+│
+├── .gitignore
+└── README.md
+```
+
+---
+
+## Installation
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/oussama-dalhi/c-http-server.git
+cd c-http-server
+```
+
+### Compile
+
+```bash
+gcc -o server server.c
+```
+
+### Run
+
+```bash
+./server
+```
+
+Expected output:
+
+```text
+Server listening on:
+
+http://127.0.0.1:8080
+http://192.168.100.226:8080
+```
+
+---
+
+## Accessing the Server
+
+From the same machine:
+
+```text
+http://127.0.0.1:8080
+```
+
+From another device on the same network:
+
+```text
+http://YOUR_LOCAL_IP:8080
+```
+
+Example:
+
+```text
+http://192.168.100.226:8080
 ```
 
 ---
@@ -318,15 +430,17 @@ http-server/
 
 Through this project I gained practical experience with:
 
-- TCP/IP networking
-- Socket programming
-- HTTP request and response structure
-- MIME types
-- Client-server communication
-- File I/O in C
-- Memory management
-- Debugging network applications
-- Browser-server interactions
+* Linux socket programming
+* TCP/IP networking
+* HTTP request parsing
+* HTTP response generation
+* MIME types
+* Client-server architecture
+* Memory allocation
+* File I/O
+* Network interface enumeration
+* Browser-server communication
+* Debugging network applications
 
 ---
 
@@ -334,35 +448,16 @@ Through this project I gained practical experience with:
 
 Potential enhancements include:
 
-- Persistent connections (Keep-Alive)
-- Serving images
-- Multithreading
-- HTTP request parsing improvements
-- Directory traversal protection
-
----
-
-## Running the Project
-
-Compile:
-
-```bash
-gcc -o server server.c -lws2_32
-```
-
-Run:
-
-```bash
-./server
-```
-
-Open:
-
-```text
-http://127.0.0.1:8080
-```
-
-in a web browser.
+* Multithreading
+* Thread pools
+* Keep-Alive connections
+* Serving images
+* Additional MIME types
+* Better request parsing
+* Directory traversal protection
+* Logging system
+* Configuration file support
+* HTTP POST support
 
 ---
 
