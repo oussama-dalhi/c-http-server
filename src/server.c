@@ -1,15 +1,29 @@
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <unistd.h>
 
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <ifaddrs.h>
-void printLocalIps(); 
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    typedef SOCKET socket_t;
+    typedef int addrlen_t;
+    #define INVALID_SOCK INVALID_SOCKET
+    #define SOCKET_ERROR_CODE SOCKET_ERROR
+    #define close_socket closesocket
+#else
+    #include <errno.h>
+    #include <unistd.h>
+    #include <sys/socket.h>
+    #include <arpa/inet.h>
+    #include <netinet/in.h>
+    typedef int socket_t;
+    typedef socklen_t addrlen_t;
+    #define INVALID_SOCK (-1)
+    #define SOCKET_ERROR_CODE (-1)
+    #define INVALID_SOCK (-1)
+    #define close_socket close
+#endif
+
 #define DEFAULT_BUF_LEN 4096
 
 char recvBuffer[DEFAULT_BUF_LEN];
@@ -20,10 +34,21 @@ char path[256];
 
 int main(void)
 {
+#ifdef _WIN32
+    
+    WSADATA wsaData;
+    int result;
+    result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if(result != 0)
+    {
+        printf("WSAStartup failed: %d\n", result);
+        return 1;
+    }
+#endif
     // Create listening socket
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    socket_t sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
-    if (sockfd == -1)
+    if (sockfd == INVALID_SOCK)
     {
         return 1;
     }
@@ -40,7 +65,7 @@ int main(void)
     int bindResult =
         bind(sockfd, (const struct sockaddr *)&serverAddr, sizeof(serverAddr));
 
-    if (bindResult == -1)
+    if (bindResult == SOCKET_ERROR_CODE)
     {
         close(sockfd);
         return 1;
@@ -49,14 +74,12 @@ int main(void)
     // Start listening
     int listenResult = listen(sockfd, SOMAXCONN);
 
-    if (listenResult == -1)
+    if (listenResult == SOCKET_ERROR_CODE)
     {
 	close(sockfd);
 	return 1;
     }
 
-    printf("Server listening on:\n");
-    printLocalIps();
     // Accept a client connection
     while (1)
     {
@@ -64,20 +87,18 @@ int main(void)
         struct sockaddr_in clientAddr;
         memset(&clientAddr, 0, sizeof(clientAddr));
 
-        int clientAddrSize = sizeof(clientAddr);
+        addrlen_t clientAddrSize = sizeof(clientAddr);
 
-        int clientSocket =
-            accept(sockfd, (struct sockaddr *)&clientAddr, &clientAddrSize);
+        socket_t clientSocket = accept(sockfd, (struct sockaddr *)&clientAddr, &clientAddrSize);
 
-        if (clientSocket == -1)
+        if (clientSocket == INVALID_SOCK)
         {
             close(sockfd);
             return 1;
         }
 
         // Receive request
-        int received =
-            recv(clientSocket, recvBuffer, DEFAULT_BUF_LEN - 1, 0);
+        int received = recv(clientSocket, recvBuffer, DEFAULT_BUF_LEN - 1, 0);
 
         if (received > 0)
         {
@@ -98,7 +119,7 @@ int main(void)
         }
 
         // Send HTTP response
-        char *filename = "index.html";
+        char *filename = "../public/index.html";
         char *contentType = "text/html";
         if (sscanf(recvBuffer, "%15s %255s", method, path) != 2)
         {
@@ -241,55 +262,3 @@ int main(void)
     close(sockfd);
     return 0;
 }
-
-
-void printLocalIps() 
-{
-	struct ifaddrs *ifaddr;
-
-	struct ifaddrs *ifa;
-
-	if(getifaddrs(&ifaddr) == -1)
-	{
-		perror("getifaddr");
-	}
-	for(ifa = ifaddr;
-		ifa != NULL;
-		ifa = ifa->ifa_next)
-	{
-		if(ifa->ifa_addr == NULL)
-		{
-		continue;
-		}
-		if(ifa->ifa_addr->sa_family == AF_INET)
-		{
-			char ip[INET_ADDRSTRLEN];
-			struct sockaddr_in *addr = (struct sockaddr_in *) ifa->ifa_addr;
- 
-			inet_ntop(AF_INET,
-			&addr->sin_addr,
-			ip, sizeof(ip));
-			printf("   http://%s:8080\n", ip);
-
-		}
-	}
-
-	freeifaddrs(ifaddr);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
