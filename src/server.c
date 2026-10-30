@@ -3,25 +3,25 @@
 #include <stdlib.h>
 
 #ifdef _WIN32
-    #include <winsock2.h>
-    #include <ws2tcpip.h>
-    typedef SOCKET socket_t;
-    typedef int addrlen_t;
-    #define INVALID_SOCK INVALID_SOCKET
-    #define SOCKET_ERROR_CODE SOCKET_ERROR
-    #define close_socket closesocket
+#include <winsock2.h>
+#include <ws2tcpip.h>
+typedef SOCKET socket_t;
+typedef int addrlen_t;
+#define INVALID_SOCK INVALID_SOCKET
+#define SOCKET_ERROR_CODE SOCKET_ERROR
+#define close_socket closesocket
 #else
-    #include <errno.h>
-    #include <signal.h>
-    #include <unistd.h>
-    #include <sys/socket.h>
-    #include <arpa/inet.h>
-    #include <netinet/in.h>
-    typedef int socket_t;
-    typedef socklen_t addrlen_t;
-    #define SOCKET_ERROR_CODE (-1)
-    #define INVALID_SOCK (-1)
-    #define close_socket close
+#include <errno.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+typedef int socket_t;
+typedef socklen_t addrlen_t;
+#define SOCKET_ERROR_CODE (-1)
+#define INVALID_SOCK (-1)
+#define close_socket close
 #endif
 
 #define DEFAULT_BUF_LEN 4096
@@ -47,13 +47,20 @@ static int send_all(socket_t s, const char *data, size_t len)
 static const char *get_content_type(const char *filename)
 {
     const char *ext = strrchr(filename, '.');
-    if (ext == NULL)                  return "application/octet-stream";
-    if (strcmp(ext, ".html") == 0)    return "text/html";
-    if (strcmp(ext, ".css") == 0)     return "text/css";
-    if (strcmp(ext, ".js") == 0)      return "application/javascript";
-    if (strcmp(ext, ".png") == 0)     return "image/png";
-    if (strcmp(ext, ".jpg") == 0)     return "image/jpeg";
-    if (strcmp(ext, ".svg") == 0)     return "image/svg+xml";
+    if (ext == NULL)
+        return "application/octet-stream";
+    if (strcmp(ext, ".html") == 0)
+        return "text/html";
+    if (strcmp(ext, ".css") == 0)
+        return "text/css";
+    if (strcmp(ext, ".js") == 0)
+        return "application/javascript";
+    if (strcmp(ext, ".png") == 0)
+        return "image/png";
+    if (strcmp(ext, ".jpg") == 0)
+        return "image/jpeg";
+    if (strcmp(ext, ".svg") == 0)
+        return "image/svg+xml";
     return "application/octet-stream";
 }
 
@@ -103,7 +110,7 @@ static int send_file(socket_t client, const char *filename,
     return 0;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 #ifdef _WIN32
     WSADATA wsaData;
@@ -117,6 +124,7 @@ int main(void)
     signal(SIGPIPE, SIG_IGN);
 #endif
 
+    const char *root = argc > 1 ? argv[1] : ".";
     // Create listening socket
     socket_t sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == INVALID_SOCK)
@@ -152,7 +160,9 @@ int main(void)
         return 1;
     }
 
-    printf("Listening on http://localhost:8080\n");
+    printf("Server listening on port 8080\n");
+    printf("Local:   http://localhost:8080\n");
+    printf("Network: http://YOUR_LOCAL_IP:8080\n");
 
     while (1)
     {
@@ -163,7 +173,7 @@ int main(void)
         socket_t clientSocket = accept(sockfd, (struct sockaddr *)&clientAddr, &clientAddrSize);
         if (clientSocket == INVALID_SOCK)
         {
-            continue; 
+            continue;
         }
 
         // Receive request
@@ -200,11 +210,11 @@ int main(void)
         if (q != NULL)
             *q = '\0';
 
-        char filename[512];
+        char filename[1024];
         if (strcmp(path, "/") == 0)
-            snprintf(filename, sizeof(filename), "public/index.html");
+            snprintf(filename, sizeof(filename), "%s/index.html", root);
         else
-            snprintf(filename, sizeof(filename), "public%s", path);
+            snprintf(filename, sizeof(filename), "%s%s", root, path);
 
         int safe = (path[0] == '/' && strstr(path, "..") == NULL);
 
