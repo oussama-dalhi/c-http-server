@@ -60,7 +60,7 @@ c-http-server/
 │   ├── style.css
 │   ├── 404.html
 │   └── 404.css
-├── screenshots/
+├── assets/
 ├── README.md
 └── .gitignore
 ```
